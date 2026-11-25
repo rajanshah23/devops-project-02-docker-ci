@@ -1,0 +1,613 @@
+
+# ============================================================
+# WORKFLOW: DOCKER BUILD AND PUSH
+# ============================================================
+# This workflow automates the process of:
+# 1. Detecting code changes pushed to GitHub.
+# 2. Downloading the latest repository source code.
+# 3. Preparing Docker Buildx for image building.
+# 4. Authenticating with GitHub Container Registry (GHCR).
+# 5. Generating Docker image tags and metadata.
+# 6. Building the Docker image from the Dockerfile.
+# 7. Publishing the image to GitHub Container Registry.
+#
+# This is an example of CI/CD automation:
+# CI  = Continuous Integration (automated build process).
+# CD  = Continuous Delivery/Deployment (publishing artifacts).
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. WORKFLOW NAME
+# ------------------------------------------------------------
+# Defines the name of this GitHub Actions workflow.
+# This name appears in the Actions tab of your GitHub repository.
+#
+# When you open:
+# GitHub Repository -> Actions
+#
+# You will see "Docker Build and Push" as the workflow name.
+#
+# The name is only for identification and does not affect
+# how Docker builds or publishes the image.
+name: Docker Build and Push
+
+
+# ------------------------------------------------------------
+# 2. WORKFLOW TRIGGER
+# ------------------------------------------------------------
+# The "on" keyword defines the events that automatically
+# trigger this GitHub Actions workflow.
+#
+# "push" means the workflow runs when someone pushes commits
+# to the GitHub repository.
+#
+# "branches: [main]" restricts execution to pushes targeting
+# the main branch.
+#
+# Example:
+# git add .
+# git commit -m "Update application"
+# git push origin main
+#
+# After this push, GitHub automatically starts this workflow.
+#
+# IMPORTANT:
+# A push to another branch, such as develop or feature/login,
+# will not trigger this workflow.
+on:
+  push:
+    branches: [ "main" ]
+
+
+# ------------------------------------------------------------
+# 3. GLOBAL ENVIRONMENT VARIABLES
+# ------------------------------------------------------------
+# Environment variables store reusable configuration values.
+#
+# These variables are available to all jobs and steps in this
+# workflow unless overridden at a more specific level.
+#
+# Using variables avoids repeating the same values throughout
+# the workflow and makes future configuration easier.
+env:
+
+  # REGISTRY:
+  # Specifies where the Docker image will be stored.
+  #
+  # GHCR stands for GitHub Container Registry.
+  # It is GitHub's container image storage service.
+  #
+  # Example registry:
+  # ghcr.io
+  #
+  # After publishing, the Docker image can be accessed using:
+  # ghcr.io/OWNER/REPOSITORY:TAG
+  REGISTRY: ghcr.io
+
+  # IMAGE_NAME:
+  # Uses GitHub's built-in "github.repository" context.
+  # github.repository automatically provides the repository
+  # name in the OWNER/REPOSITORY format.
+  # Example:
+  # OWNER = xxxxx
+  # REPOSITORY = devops-project-01
+  #
+  # Result:
+  # IMAGE_NAME = xxxxx/devops-project-01
+  #
+  # This means you do not need to manually hardcode your
+  # GitHub username or repository name.
+  IMAGE_NAME: ${{ github.repository }}
+
+
+# ------------------------------------------------------------
+# 4. JOBS
+# ------------------------------------------------------------
+# A job is a collection of steps that execute on a runner.
+#
+# A workflow can contain multiple jobs.
+# Jobs run in parallel by default unless dependencies are
+# configured using the "needs" keyword.
+#
+# This workflow currently contains one job:
+# build-and-push-image
+jobs:
+
+  # ----------------------------------------------------------
+  # JOB: BUILD AND PUSH DOCKER IMAGE
+  # ----------------------------------------------------------
+  # This job is responsible for building the Docker image
+  # and publishing it to GitHub Container Registry.
+  #
+  # The job runs on a fresh GitHub-hosted Ubuntu virtual
+  # machine provided by GitHub Actions.
+  #
+  # The runner executes all the steps defined below.
+  build-and-push-image:
+
+    # --------------------------------------------------------
+    # RUNNER ENVIRONMENT
+    # --------------------------------------------------------
+    # Specifies the operating system and runner environment.
+    #
+    # ubuntu-latest means GitHub selects its latest supported
+    # Ubuntu runner image.
+    #
+    # The runner provides the environment required to execute
+    # commands and GitHub Actions.
+    #
+    # Docker tools are configured in the following steps.
+    #
+    # IMPORTANT:
+    # GitHub-hosted runners are temporary.
+    # The runner environment is generally discarded after
+    # the job finishes.
+    runs-on: ubuntu-latest
+
+
+    # --------------------------------------------------------
+    # JOB PERMISSIONS
+    # --------------------------------------------------------
+    # Defines the permissions assigned to GITHUB_TOKEN.
+    #
+    # GITHUB_TOKEN is a temporary authentication token
+    # automatically generated by GitHub for a workflow run.
+    #
+    # We follow the principle of least privilege:
+    # Grant only the permissions required by this workflow.
+    permissions:
+
+      # contents: read
+      # Allows the workflow to read repository contents.
+      #
+      # This permission is required by checkout action to
+      # access and download the repository source code.
+      #
+      # It does not grant permission to modify repository
+      # files or push commits.
+      contents: read
+
+      # packages: write
+      # Allows the workflow to publish Docker images and
+      # other supported packages to GitHub Packages.
+      #
+      # This permission is necessary because our workflow
+      # pushes the Docker image to GitHub Container Registry.
+      #
+      # Without this permission, the authentication or
+      # image-publishing operation may fail with a
+      # permission-denied error.
+      packages: write
+
+
+    # --------------------------------------------------------
+    # 5. WORKFLOW STEPS
+    # --------------------------------------------------------
+    # Steps execute sequentially in the order they are written.
+    #
+    # Each step performs a specific task required to build
+    # and publish the Docker image.
+    steps:
+
+
+      # ======================================================
+      # STEP 1: CHECKOUT REPOSITORY
+      # ======================================================
+      # Downloads the repository source code into the
+      # GitHub Actions runner's working directory.
+      #
+      # GitHub-hosted runners start with a clean environment.
+      # They do not automatically contain your application code.
+      #
+      # This action checks out the repository at the commit
+      # associated with the workflow event.
+      #
+      # After this step, the runner can access files such as:
+      #
+      # Dockerfile
+      # package.json
+      # package-lock.json
+      # src/
+      # README.md
+      #
+      # These files are required for building the Docker image.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # STEP 2: SET UP DOCKER BUILDX
+      # ======================================================
+      # Configures Docker Buildx on the GitHub Actions runner.
+      #
+      # Docker Buildx is an extended Docker build interface
+      # based on BuildKit.
+      #
+      # BuildKit provides advanced image-building features:
+      #
+      # 1. Improved build performance.
+      # 2. Parallel execution of build operations.
+      # 3. Advanced build caching.
+      # 4. Multi-platform image building.
+      # 5. Better build configuration.
+      #
+      # Buildx is useful in CI/CD pipelines because it makes
+      # Docker image building more flexible and efficient.
+      #
+      # The action prepares a Buildx builder that the
+      # Docker build-push-action can use in a later step.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+
+      # ======================================================
+      # STEP 3: LOGIN TO GITHUB CONTAINER REGISTRY
+      # ======================================================
+      # Authenticates Docker with GitHub Container Registry.
+      #
+      # GHCR is used to store and distribute Docker images.
+      #
+      # Before pushing an image to a private or authenticated
+      # registry, Docker needs valid authentication credentials.
+      #
+      # This step configures Docker authentication so that
+      # subsequent Docker commands can push images to GHCR.
+      #
+      # The docker/login-action automates this login process.
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+
+        # The "with" keyword passes configuration inputs
+        # to the Docker login action.
+        with:
+
+          # registry:
+          # Specifies the container registry endpoint.
+          #
+          # The value comes from the global REGISTRY variable.
+          #
+          # Result:
+          # ghcr.io
+          registry: ${{ env.REGISTRY }}
+
+          # username:
+          # Uses the GitHub account associated with the
+          # workflow event.
+          #
+          # github.actor is a built-in GitHub context that
+          # identifies the user or account that triggered
+          # the workflow.
+          #
+          # For example:
+          # If the workflow was triggered by a push from
+          # the account "xxxxx", that username is used.
+          username: ${{ github.actor }}
+
+          # password:
+          # Uses GitHub's automatically generated GITHUB_TOKEN.
+          #
+          # The token is provided securely through GitHub
+          # Actions secrets.
+          #
+          # IMPORTANT:
+          # Never hardcode passwords, access tokens, or
+          # personal credentials directly inside YAML files.
+          #
+          # GITHUB_TOKEN is used instead of a manually
+          # created Personal Access Token (PAT).
+          #
+          # The packages: write permission configured above
+          # allows this token to publish packages to GHCR.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+
+      # ======================================================
+      # STEP 4: EXTRACT DOCKER IMAGE METADATA
+      # ======================================================
+      # Generates Docker image tags and labels automatically.
+      #
+      # Docker tags identify different versions of an image.
+      #
+      # Example:
+      # ghcr.io/owner/repository:latest
+      # ghcr.io/owner/repository:a1b2c3d
+      #
+      # Tags help developers identify and deploy specific
+      # versions of an application.
+      #
+      # The metadata-action can automatically generate:
+      #
+      # 1. Image tags.
+      # 2. OCI-compatible image labels.
+      # 3. Version information.
+      # 4. Source repository metadata.
+      #
+      # The generated values are passed to the next step.
+      - name: Extract metadata (tags, labels) for Docker
+
+        # id:
+        # Gives this step a unique identifier.
+        #
+        # We use "meta" so that later steps can access
+        # the outputs generated by this action.
+        #
+        # Example:
+        # steps.meta.outputs.tags
+        # steps.meta.outputs.labels
+        id: meta
+
+        # Specifies the Docker metadata action and its version.
+        uses: docker/metadata-action@v5
+
+        with:
+
+          # images:
+          # Defines the complete Docker image name.
+          #
+          # Combines:
+          # REGISTRY + IMAGE_NAME
+          #
+          # Example:
+          # ghcr.io/Osomudeya/devops-project-01
+          #
+          # This is the base name to which generated tags
+          # will be attached.
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+
+          # --------------------------------------------------
+          # DOCKER IMAGE TAG GENERATION
+          # --------------------------------------------------
+          # Defines which tags should be generated for the image.
+          #
+          # Multiple tag strategies can be configured.
+          #
+          # Each generated tag will be available through:
+          # steps.meta.outputs.tags
+          #
+          # The generated tags are later passed to the
+          # Docker build-push-action.
+          tags: |
+
+            # TAG 1: SHORT GIT COMMIT SHA
+            # type=sha:
+            # Generates a Docker tag based on the Git commit SHA.
+            #
+            # format=short:
+            # Uses a shortened version of the full commit hash.
+            #
+            # Example:
+            # Full commit SHA:
+            # a1b2c3d4e5f6789012345678901234567890abcd
+            #
+            # Short commit SHA:
+            # a1b2c3d
+            #
+            # Generated image:
+            # ghcr.io/owner/repository:a1b2c3d
+            #
+            # BENEFIT:
+            # Every image can be associated with a particular
+            # Git commit, making version tracking and rollback
+            # easier.
+            type=sha,format=short
+
+            # TAG 2: LATEST
+            # type=raw:
+            # Creates a tag using the exact value specified.
+            #
+            # value=latest:
+            # Sets the Docker image tag to "latest".
+            #
+            # Generated image:
+            # ghcr.io/owner/repository:latest
+            #
+            # BENEFIT:
+            # Provides a convenient tag for identifying the
+            # most recently published image.
+            #
+            # IMPORTANT:
+            # "latest" is only a tag name.
+            # Docker does not automatically guarantee that it
+            # represents the newest production-ready version.
+            type=raw,value=latest
+
+
+      # ======================================================
+      # STEP 5: BUILD AND PUSH DOCKER IMAGE
+      # ======================================================
+      # This is the final and most important step.
+      #
+      # It builds a Docker image using the Dockerfile in
+      # the repository and publishes the image to GHCR.
+      #
+      # The build-push-action uses the Buildx builder
+      # configured in Step 2.
+      #
+      # The generated image tags and labels from Step 4
+      # are also used during this operation.
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+
+        with:
+
+          # context:
+          # Defines the directory containing the files
+          # required for building the Docker image.
+          #
+          # "." means the current repository root directory.
+          #
+          # Docker can access files inside this build context
+          # when executing instructions in the Dockerfile.
+          #
+          # Example repository:
+          #
+          # project/
+          # ├── Dockerfile
+          # ├── package.json
+          # ├── package-lock.json
+          # ├── src/
+          # └── README.md
+          #
+          # Here, "." makes the project directory the build
+          # context.
+          #
+          # IMPORTANT:
+          # Use .dockerignore to exclude unnecessary files
+          # such as node_modules, .git, local environment
+          # files, and other files that should not be sent
+          # to the Docker build context.
+          context: .
+
+
+          # push:
+          # Controls whether the generated Docker image
+          # should be uploaded to the container registry.
+          #
+          # true:
+          # Build the Docker image and push it to GHCR.
+          #
+          # false:
+          # Build the Docker image without publishing it.
+          #
+          # We use true because the purpose of this workflow
+          # is to build and publish the Docker image.
+          push: true
+
+
+          # tags:
+          # Assigns the generated Docker tags to the image.
+          #
+          # These tags come from Step 4, where the metadata
+          # action generated the commit SHA and latest tags.
+          #
+          # steps:
+          # Refers to the workflow steps.
+          #
+          # meta:
+          # Refers to the step whose id is "meta".
+          #
+          # outputs:
+          # Refers to the output values generated by that step.
+          #
+          # tags:
+          # Contains the generated Docker image tags.
+          #
+          # Result:
+          # The image receives both tags:
+          # ghcr.io/owner/repository:COMMIT_SHA
+          # ghcr.io/owner/repository:latest
+          tags: ${{ steps.meta.outputs.tags }}
+
+
+          # labels:
+          # Adds metadata labels to the Docker image.
+          #
+          # These labels are generated automatically by
+          # docker/metadata-action.
+          #
+          # Labels can contain information such as:
+          # - Source repository.
+          # - Image version.
+          # - Git revision.
+          # - Build information.
+          #
+          # Labels improve image identification, inspection,
+          # maintenance, and traceability.
+          #
+          # The generated labels are attached to the image
+          # during the Docker build process.
+          labels: ${{ steps.meta.outputs.labels }}
+
+
+          # --------------------------------------------------
+          # DOCKER BUILD CACHE CONFIGURATION
+          # --------------------------------------------------
+          # Docker caching avoids rebuilding unchanged image
+          # layers unnecessarily.
+          #
+          # Docker images are constructed from multiple layers.
+          #
+          # For example:
+          # 1. Base operating system image.
+          # 2. Runtime installation.
+          # 3. Dependency installation.
+          # 4. Application source code.
+          #
+          # If an earlier layer has not changed, Docker can
+          # reuse its previously generated result.
+          #
+          # This improves build performance and reduces
+          # unnecessary processing.
+
+
+          # cache-from:
+          # Restores previously saved Docker build layers.
+          #
+          # type=gha:
+          # Uses GitHub Actions cache as the cache backend.
+          #
+          # During a new workflow run, BuildKit checks whether
+          # previously built layers can be reused.
+          #
+          # If matching cached layers are available, they
+          # can be reused instead of rebuilding everything.
+          #
+          # BENEFIT:
+          # Reduces Docker build time on subsequent runs.
+          cache-from: type=gha
+
+
+          # cache-to:
+          # Saves newly generated Docker build layers
+          # into the GitHub Actions cache.
+          #
+          # type=gha:
+          # Stores the cache using GitHub Actions cache.
+          #
+          # mode=max:
+          # Exports all eligible intermediate build layers,
+          # rather than only the final image layers.
+          #
+          # This can improve cache reuse in future builds,
+          # particularly for multi-stage Docker builds.
+          #
+          # BENEFIT:
+          # Future workflow executions can reuse more
+          # previously generated Docker build layers.
+          cache-to: type=gha,mode=max
+
+
+# ============================================================
+# EXPECTED RESULT
+# ============================================================
+# After the workflow completes successfully:
+#
+# 1. The repository source code is checked out.
+# 2. Docker Buildx is configured.
+# 3. Docker authenticates with GHCR.
+# 4. Image tags and labels are generated.
+# 5. The Docker image is built.
+# 6. The image is pushed to GitHub Container Registry.
+#
+# Example published images:
+#
+# ghcr.io/owner/repository:latest
+# ghcr.io/owner/repository:a1b2c3d
+#
+# You can view published images under:
+#
+# GitHub Profile
+#      |
+#      v
+# Packages
+#      |
+#      v
+# Your Docker Image Package
+#
+# You can also pull the published image using:
+#
+# docker pull ghcr.io/owner/repository:latest
+#
+# ============================================================

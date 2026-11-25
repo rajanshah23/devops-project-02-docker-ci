@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DevOps CICD pipeline</title>
+  </head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 50px;
+    }
+    input {
+      padding: 10px;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #result {
+      margin-top: 20px;
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
+  <body>
+    <h1>Simple DevOps API</h1>
+    <p>Enter your name to test the API:</p>
+    <input
+      type="text"
+      id="nameInput"
+      placeholder="Enter name (or type 'error')"
+    />
+    <button onclick="callApi()">Send Request</button>
+    <div id="result"></div>
+
+    <script>
+      async function callApi() {
+        const name = document.getElementById("nameInput").value;
+        const resultDiv = document.getElementById("result");
+        resultDiv.innerText = "Loading...";
+
+        try {
+          // Call our backend API
+          const response = await fetch(
+            `/api/greet?name=${encodeURIComponent(name)}`,
+          );
+          const data = await response.json();
+
+          if (response.ok) {
+            resultDiv.innerText = data.message;
+            resultDiv.style.color = "green";
+          } else {
+            resultDiv.innerText = `Error: ${data.error}`;
+            resultDiv.style.color = "red";
+          }
+        } catch (error) {
+          resultDiv.innerText = "Network Error!";
+          resultDiv.style.color = "red";
+        }
+      }
+    </script>
+  </body>
+</html>

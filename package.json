@@ -1,0 +1,23 @@
+{
+  "name": "devops-project-1",
+  "version": "1.0.0",
+  "description": "A simple API app for CI pipeline testing",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": " nyc --reporter=text --reporter=html node test/test.js",
+    "lint": "eslint src/**/*.js"
+  },
+  "keywords": [],
+  "author": "Rajan Kumar Gupta",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.3.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "nyc": "^18.0.0",
+    "supertest": "^7.3.2"
+  }
+}
